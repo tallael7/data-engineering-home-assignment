@@ -1,0 +1,115 @@
+###------------------actions for main Objectives
+create S3 bucket (currently I created 1 Bucket, in the real world I will create bucket for each folder inside the current bucket (DB's, Athena_code, logs, Glue_code and more) for more comfortable versioning and automatic deletion actions)
+Bucket name is ending with -dev for Managing test and production environments, in other environments\account we will have -tst and -prod
+create folders inside bucket
+open Athena and set query result to s3://data-engineer-assignment-tal-lael-dev/Athena_code/
+run Athena code:
+create database tal_lael_dw_staging LOCATION 's3://data-engineer-assignment-tal-lael-dev/dw_staging/';
+
+create database tal_lael_dw LOCATION 's3://data-engineer-assignment-tal-lael-dev/dw/';
+
+CREATE EXTERNAL TABLE `stocks_data`(
+  `date` string COMMENT 'from deserializer', 
+  `open` string COMMENT 'from deserializer', 
+  `high` string COMMENT 'from deserializer', 
+  `low` string COMMENT 'from deserializer', 
+  `close` string COMMENT 'from deserializer', 
+  `volume` string COMMENT 'from deserializer', 
+  `ticker` string COMMENT 'from deserializer')
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.serde2.OpenCSVSerde' 
+WITH SERDEPROPERTIES ( 
+  'separatorChar'=',') 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.mapred.TextInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION
+  's3://data-engineer-assignment-tal-lael-dev/dw_staging/'
+TBLPROPERTIES (
+  'classification'='csv', 
+  'skip.header.line.count'='1')
+
+CREATE EXTERNAL TABLE `avg_closing_rate`(
+  `date` date, 
+  `avg_closing_rate` decimal(10,5))
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe' 
+WITH SERDEPROPERTIES ( 
+  'paths'='date') 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.mapred.TextInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION
+  's3://data-engineer-assignment-tal-lael-dev/dw/avg_closing_rate'
+TBLPROPERTIES (
+  'classification'='Parquet', 
+  'has_encrypted_data'='false')
+
+CREATE EXTERNAL TABLE  `top_stock`(
+  `ticker` varchar(10), 
+  `avg_worth` double)
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe' 
+WITH SERDEPROPERTIES ( 
+  'paths'='ticker') 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.mapred.TextInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION
+  's3://data-engineer-assignment-tal-lael-dev/dw/top_stock'
+TBLPROPERTIES (
+  'classification'='Parquet', 
+  'has_encrypted_data'='false')
+
+
+CREATE EXTERNAL TABLE  `top_standard_deviation`(
+  `ticker` varchar(10), 
+  `standard_deviation` double)
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe' 
+WITH SERDEPROPERTIES ( 
+  'paths'='ticker') 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.mapred.TextInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION
+  's3://data-engineer-assignment-tal-lael-dev/dw/top_standard_deviation'
+TBLPROPERTIES (
+  'classification'='Parquet', 
+  'has_encrypted_data'='false')
+
+CREATE EXTERNAL TABLE `top_lastm_change`(
+  `ticker` varchar(10), 
+  `date` date, 
+  `percent_return_30d` double)
+ROW FORMAT SERDE 
+  'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe' 
+WITH SERDEPROPERTIES ( 
+  'paths'='ticker') 
+STORED AS INPUTFORMAT 
+  'org.apache.hadoop.mapred.TextInputFormat' 
+OUTPUTFORMAT 
+  'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+LOCATION
+  's3://data-engineer-assignment-tal-lael-dev/dw/top_lastM_change'
+TBLPROPERTIES (
+  'classification'='Parquet', 
+  'has_encrypted_data'='false')
+
+create Glue code tal_lael_stocks_creation that write results into 4 Athena tables (Glue code in file tal_lael_stocks_creation.py)
+
+###---------------------action for AWS DEPLOYMENT\bonus questions
+on Cloudformation (file tal_lael_stack.YML):
+create Glue job+ DB + tables + crawler with stack: tal-lael-stocks-creation-cloud-Glue
+
+on cloudshell run to create environment variables:
+
+echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY}" > .env
+echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}" >> .env
+echo "STACK_NAME=tal-lael-stack" >> .env
+
+or use tal_lael_create-update-stack.sh to run on CloudShell for environment variables and Cloudformation YML file

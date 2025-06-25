@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  projectname:
+    Type: String
+    Description: name of the projaect for use
+
+Resources:
+
+  ## Glue Catalog Database
+  tallaeldwcloud:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: tal_lael_dw_cloud
+        Description: Glue database for stock data
+
+  ## Glue Catalog Table
+  avgclosingrateTable:
+    Type: AWS::Glue::Table
+    DependsOn: tallaeldwcloud
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: tal_lael_dw_cloud
+      TableInput:
+        Name: avg_closing_rate
+        Description: avg_closing_rate
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+        StorageDescriptor:
+          Columns:
+            - Name: date
+              Type: date
+            - Name: avg_closing_rate
+              Type: decimal(10,5)
+          Location: s3://data-engineer-assignment-tal-lael-dev/dw/avg_closing_rate
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          Compressed: false
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+            Parameters:
+              serialization.format: '1'
+
+  toplastmchangeTable:
+    Type: AWS::Glue::Table
+    DependsOn: tallaeldwcloud
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: tal_lael_dw_cloud
+      TableInput:
+        Name: top_lastm_change
+        Description: top_lastm_change
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+        StorageDescriptor:
+          Columns:
+            - Name: ticker
+              Type: varchar(10)
+            - Name: date
+              Type: date
+            - Name: percent_return_30d
+              Type: double
+          Location: s3://data-engineer-assignment-tal-lael-dev/dw/top_lastm_change
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          Compressed: false
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+            Parameters:
+              serialization.format: '1'
+
+  topstandarddeviationTable:
+    Type: AWS::Glue::Table
+    DependsOn: tallaeldwcloud
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: tal_lael_dw_cloud
+      TableInput:
+        Name: top_standard_deviation
+        Description: top_standard_deviation
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+        StorageDescriptor:
+          Columns:
+            - Name: ticker
+              Type: varchar(10)
+            - Name: standard_deviation
+              Type: double
+          Location: s3://data-engineer-assignment-tal-lael-dev/dw/top_standard_deviation
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          Compressed: false
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+            Parameters:
+              serialization.format: '1'
+
+  topstockTable:
+    Type: AWS::Glue::Table
+    DependsOn: tallaeldwcloud
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: tal_lael_dw_cloud
+      TableInput:
+        Name: top_stock
+        Description: top_stock
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          classification: parquet
+        StorageDescriptor:
+          Columns:
+            - Name: ticker
+              Type: varchar(10)
+            - Name: avg_worth
+              Type: double
+          Location: s3://data-engineer-assignment-tal-lael-dev/dw/top_stock
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          Compressed: false
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+            Parameters:
+              serialization.format: '1'
+
+  GlueJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  GlueJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: tal_lael_stocks_creation_cloud
+      Role: !GetAtt GlueJobRole.Arn
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub s3://data-engineer-assignment-tal-lael-dev/Glue_code/${projectname}_stocks_creation.py
+        PythonVersion: '3'
+      GlueVersion: '4.0'
+      MaxCapacity: 2
+      Timeout: 10
+      DefaultArguments:
+        '--job-language': python
+        '--enable-metrics': 'true'
+        '--TempDir': s3://data-engineer-assignment-tal-lael-dev/Glue_code/
+        '--enable-continuous-cloudwatch-log': 'true'
+
+  MyGlueCrawler:
+    Type: AWS::Glue::Crawler
+    Properties:
+      Name: tal-lael-stocks-crawler
+      Role: !GetAtt GlueJobRole.Arn   
+      DatabaseName: tal_lael_dw_staging
+      Targets:
+        S3Targets:
+          - Path: s3://data-engineer-assignment-tal-lael-dev/dw_staging/
+      TablePrefix: ""
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: DEPRECATE_IN_DATABASE
+      RecrawlPolicy:
+        RecrawlBehavior: CRAWL_EVERYTHING
+      Configuration: >
+        {
+          "Version": 1.0,
+          "CrawlerOutput": {
+            "Partitions": {
+              "AddOrUpdateBehavior": "InheritFromTable"
+            }
+          }
+        }
+
+Outputs:
+  GlueJobName:
+    Value: !Ref GlueJob
+    Description: The name of the created Glue job
